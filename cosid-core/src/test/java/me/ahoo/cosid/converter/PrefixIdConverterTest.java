@@ -13,47 +13,65 @@
 
 package me.ahoo.cosid.converter;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.*;
+
+import me.ahoo.cosid.stat.converter.PrefixConverterStat;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * @author rocher kong
  */
 class PrefixIdConverterTest {
-   private String prefix = "no_";
-   private final PrefixIdConverter prefixIdConverter = new PrefixIdConverter(prefix, ToStringIdConverter.INSTANCE);
-
-    @ParameterizedTest
-    @ValueSource(strings = {"no_1","no_100","no_1000"})
-    void asString(String argId) {
-        long idStr = prefixIdConverter.asLong(argId);
-        Assertions.assertNotNull(idStr);
+    private static final String PREFIX = "prefix_";
+    private final PrefixIdConverter idConverter = new PrefixIdConverter(PREFIX, ToStringIdConverter.INSTANCE);
+    
+    @Test
+    void getSuffix() {
+        assertThat(idConverter.getPrefix(), equalTo(PREFIX));
     }
-
-    @ParameterizedTest
-    @ValueSource(longs = {-1,1, 5, 62, 63, 124, Integer.MAX_VALUE, Long.MAX_VALUE})
-    void asLong(long argId) {
-        String idStr = prefixIdConverter.asString(argId);
-        long actual = prefixIdConverter.asLong(idStr);
-        Assertions.assertEquals(argId, actual);
+    
+    @Test
+    void getActual() {
+        assertThat(idConverter.getActual(), equalTo(ToStringIdConverter.INSTANCE));
     }
-
+    
+    @Test
+    void asString() {
+        long randomId = ThreadLocalRandom.current().nextLong();
+        String actual = idConverter.asString(randomId);
+        assertThat(actual, equalTo(PREFIX + randomId));
+    }
+    
+    @Test
+    void asLong() {
+        long randomId = ThreadLocalRandom.current().nextLong();
+        long actual = idConverter.asLong(PREFIX + randomId);
+        assertThat(actual, equalTo(randomId));
+    }
+    
     @Test
     void asLongWhenNumberFormat() {
         Assertions.assertDoesNotThrow(() -> {
-            prefixIdConverter.asLong("no_-1");
+            idConverter.asLong("prefix_-1");
         });
-        Assertions.assertThrows(StringIndexOutOfBoundsException.class,() -> {
-            prefixIdConverter.asLong("-1");
+        Assertions.assertThrows(StringIndexOutOfBoundsException.class, () -> {
+            idConverter.asLong("-1");
         });
         Assertions.assertDoesNotThrow(() -> {
-            prefixIdConverter.asLong("no_111");
+            idConverter.asLong("prefix_111");
         });
         Assertions.assertThrows(NumberFormatException.class, () -> {
-            prefixIdConverter.asLong("no_1_");
+            idConverter.asLong("prefix_1_");
         });
     }
-
+    
+    @Test
+    void stat() {
+        assertThat(idConverter.stat(), instanceOf(PrefixConverterStat.class));
+    }
 }

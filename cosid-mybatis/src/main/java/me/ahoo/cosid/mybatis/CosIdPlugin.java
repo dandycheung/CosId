@@ -25,6 +25,7 @@ import org.apache.ibatis.plugin.Signature;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * CosId Plugin.
@@ -33,15 +34,18 @@ import java.util.Map;
  */
 @Intercepts({@Signature(type = Executor.class, method = "update", args = {MappedStatement.class, Object.class})})
 public class CosIdPlugin implements Interceptor {
-    
-    /**
-     * TODO: add support customize list key.
-     */
+
     public static final String DEFAULT_LIST_KEY = "list";
     private final CosIdAccessorRegistry accessorRegistry;
+    private final String listKey;
 
     public CosIdPlugin(CosIdAccessorRegistry accessorRegistry) {
+        this(accessorRegistry, DEFAULT_LIST_KEY);
+    }
+
+    public CosIdPlugin(CosIdAccessorRegistry accessorRegistry, String listKey) {
         this.accessorRegistry = accessorRegistry;
+        this.listKey = listKey;
     }
 
     @SuppressWarnings("rawtypes")
@@ -55,13 +59,22 @@ public class CosIdPlugin implements Interceptor {
         }
 
         Object parameter = args[1];
+        if (Objects.isNull(parameter)) {
+            return invocation.proceed();
+        }
+
         if (!(parameter instanceof Map)) {
             accessorRegistry.ensureId(parameter);
             return invocation.proceed();
         }
-
-        Collection entityList = (Collection) ((Map) parameter).get(DEFAULT_LIST_KEY);
-
+        boolean hasList = ((Map) parameter).containsKey(listKey);
+        if (!hasList) {
+            return invocation.proceed();
+        }
+        Collection entityList = (Collection) ((Map) parameter).get(listKey);
+        if (Objects.isNull(entityList)) {
+            return invocation.proceed();
+        }
         for (Object entity : entityList) {
             accessorRegistry.ensureId(entity);
         }

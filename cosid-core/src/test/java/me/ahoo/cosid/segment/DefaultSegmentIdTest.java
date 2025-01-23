@@ -13,7 +13,11 @@
 
 package me.ahoo.cosid.segment;
 
-import me.ahoo.cosid.test.ConcurrentGenerateTest;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.*;
+
+import me.ahoo.cosid.test.ConcurrentGenerateSpec;
+import me.ahoo.cosid.test.ConcurrentGenerateStingSpec;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -30,16 +34,28 @@ class DefaultSegmentIdTest {
     }
     
     @Test
+    void current() {
+        DefaultSegmentId defaultSegmentId = new DefaultSegmentId(new IdSegmentDistributor.Mock());
+        assertThat(defaultSegmentId.current(), equalTo(DefaultIdSegment.OVERFLOW));
+    }
+    
+    @Test
     void generateWhenConcurrent() {
         DefaultSegmentId defaultSegmentId = new DefaultSegmentId(new IdSegmentDistributor.Mock());
-        new ConcurrentGenerateTest(defaultSegmentId)
-            .assertConcurrentGenerate();
+        new ConcurrentGenerateSpec(defaultSegmentId)
+            .verify();
     }
     
     @Test
     void generateWhenMultiInstanceConcurrent() {
         IdSegmentDistributor testMaxIdDistributor = new IdSegmentDistributor.Mock();
-        new ConcurrentGenerateTest(new DefaultSegmentId(testMaxIdDistributor), new DefaultSegmentId(testMaxIdDistributor))
-            .assertConcurrentGenerate();
+        new ConcurrentGenerateSpec(new DefaultSegmentId(testMaxIdDistributor), new DefaultSegmentId(testMaxIdDistributor))
+            .verify();
+    }
+    
+    @Test
+    public void generateWhenConcurrentString() {
+        IdSegmentDistributor testMaxIdDistributor = new IdSegmentDistributor.Mock();
+        new ConcurrentGenerateStingSpec(new DefaultSegmentId(testMaxIdDistributor)).verify();
     }
 }
