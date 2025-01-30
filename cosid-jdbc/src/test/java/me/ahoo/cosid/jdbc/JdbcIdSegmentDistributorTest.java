@@ -13,97 +13,66 @@
 
 package me.ahoo.cosid.jdbc;
 
+import me.ahoo.cosid.CosIdException;
 import me.ahoo.cosid.jdbc.exception.SegmentNameMissingException;
 import me.ahoo.cosid.segment.IdSegmentDistributor;
-import me.ahoo.cosid.segment.SegmentChainId;
-import me.ahoo.cosid.segment.SegmentId;
-import me.ahoo.cosid.test.ConcurrentGenerateTest;
-import me.ahoo.cosid.util.MockIdGenerator;
+import me.ahoo.cosid.segment.IdSegmentDistributorFactory;
+import me.ahoo.cosid.test.MockIdGenerator;
+import me.ahoo.cosid.test.segment.distributor.IdSegmentDistributorSpec;
 
-import lombok.SneakyThrows;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
 
 import javax.sql.DataSource;
-import java.sql.SQLIntegrityConstraintViolationException;
-import java.util.Arrays;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * @author ahoo wang
  */
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class JdbcIdSegmentDistributorTest {
+class JdbcIdSegmentDistributorTest extends IdSegmentDistributorSpec {
     DataSource dataSource;
-    private JdbcIdSegmentInitializer mySqlIdSegmentInitializer;
-    private IdSegmentDistributor mySqlIdSegmentDistributor;
+    JdbcIdSegmentDistributorFactory distributorFactory;
+    JdbcIdSegmentInitializer mySqlIdSegmentInitializer;
     
-    
-    @BeforeAll
-    private void setup() {
+    @BeforeEach
+    void setup() {
         dataSource = DataSourceFactory.INSTANCE.createDataSource();
         mySqlIdSegmentInitializer = new JdbcIdSegmentInitializer(dataSource);
-        mySqlIdSegmentDistributor = new JdbcIdSegmentDistributor("JdbcIdSegmentDistributorTest", MockIdGenerator.INSTANCE.generateAsString(), 100, dataSource);
-        mySqlIdSegmentInitializer.tryInitIdSegment(mySqlIdSegmentDistributor.getNamespacedName(), 0);
+        distributorFactory =
+            new JdbcIdSegmentDistributorFactory(dataSource, true, mySqlIdSegmentInitializer, JdbcIdSegmentDistributor.INCREMENT_MAX_ID_SQL, JdbcIdSegmentDistributor.FETCH_MAX_ID_SQL);
+    }
+    
+    @Override
+    protected IdSegmentDistributorFactory getFactory() {
+        return distributorFactory;
+    }
+    
+    
+    @Override
+    protected <T extends IdSegmentDistributor> void setMaxIdBack(T distributor, long maxId) {
+    
+    }
+    
+    @Override
+    public void nextMaxIdWhenBack() {
+    
     }
     
     @Test
-    void nextMaxId() {
-        long id = mySqlIdSegmentDistributor.nextMaxId(100);
-        Assertions.assertEquals(100, id);
+    void nextMaxIdWhenSegmentNameMissing() {
+        String namespace = MockIdGenerator.INSTANCE.generateAsString();
+        JdbcIdSegmentDistributor jdbcIdSegmentDistributor = new JdbcIdSegmentDistributor(namespace, "SegmentNameMissing", 100, dataSource);
+        Assertions.assertThrows(SegmentNameMissingException.class, () -> {
+            jdbcIdSegmentDistributor.nextMaxId(1);
+        });
     }
     
     @Test
-    void initSchema() {
-        mySqlIdSegmentInitializer.tryInitCosIdTable();
+    void nextMaxIdWhenWrongSql() {
+        String namespace = MockIdGenerator.INSTANCE.generateAsString();
+        JdbcIdSegmentDistributor jdbcIdSegmentDistributor = new JdbcIdSegmentDistributor(namespace, "WrongSql", 100,"WrongSql","WrongSql", dataSource);
+        Assertions.assertThrows(CosIdException.class, () -> {
+            jdbcIdSegmentDistributor.nextMaxId(1);
+        });
     }
-    
-    @Test
-    void nextMaxIdWhenMissingIdSegment() {
-        JdbcIdSegmentDistributor missingDistributor = new JdbcIdSegmentDistributor("JdbcIdSegmentDistributorTest", MockIdGenerator.INSTANCE.generateAsString(), 10, dataSource);
-        Assertions.assertThrows(SegmentNameMissingException.class, () -> missingDistributor.nextMaxId(100));
-    }
-    
-    @SneakyThrows
-    @Test
-    void missing_init() {
-        JdbcIdSegmentDistributor missingDistributor = new JdbcIdSegmentDistributor("JdbcIdSegmentDistributorTest", MockIdGenerator.INSTANCE.generateAsString(), 10, dataSource);
-        mySqlIdSegmentInitializer.initIdSegment(missingDistributor.getNamespacedName(), 0);
-        long id = missingDistributor.nextMaxId(100);
-        Assertions.assertEquals(100, id);
-        Assertions.assertThrows(SQLIntegrityConstraintViolationException.class, () -> mySqlIdSegmentInitializer.initIdSegment(missingDistributor.getNamespacedName(), 0));
-    }
-    
-    @SneakyThrows
-    @Test
-    public void concurrent_generate_step_100() {
-        String namespace = UUID.randomUUID().toString();
-        JdbcIdSegmentDistributor maxIdDistributorGenerateStep100 = new JdbcIdSegmentDistributor(namespace, MockIdGenerator.INSTANCE.generateAsString(), 100, dataSource);
-        mySqlIdSegmentInitializer.initIdSegment(maxIdDistributorGenerateStep100.getNamespacedName(), 0);
-        SegmentId segmentChainId = new SegmentChainId(maxIdDistributorGenerateStep100);
-        new ConcurrentGenerateTest(segmentChainId).assertConcurrentGenerate();
-    }
-    
-    @SneakyThrows
-    @Test
-    void nextMaxIdWhenConcurrent() {
-        int times = 100;
-        CompletableFuture<Long>[] results = new CompletableFuture[100];
-        JdbcIdSegmentDistributor idSegmentDistributor = new JdbcIdSegmentDistributor("JdbcIdSegmentDistributorTest", MockIdGenerator.INSTANCE.generateAsString(), 10, dataSource);
-        mySqlIdSegmentInitializer.initIdSegment(idSegmentDistributor.getNamespacedName(), 0);
-        for (int i = 0; i < times; i++) {
-            results[i] = CompletableFuture.supplyAsync(() -> idSegmentDistributor.nextMaxId(1));
-        }
-        
-        CompletableFuture.allOf(results).join();
-        
-        Long[] machineIds = Arrays.stream(results).map(CompletableFuture::join).sorted().toArray(Long[]::new);
-        for (int i = 0; i < machineIds.length; i++) {
-            Assertions.assertEquals(i + 1, machineIds[i]);
-        }
-    }
-    
 }

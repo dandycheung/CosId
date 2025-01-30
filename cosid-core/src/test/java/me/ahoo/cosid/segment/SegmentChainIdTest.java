@@ -14,9 +14,13 @@
 package me.ahoo.cosid.segment;
 
 import static me.ahoo.cosid.segment.IdSegment.TIME_TO_LIVE_FOREVER;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.*;
 
 import me.ahoo.cosid.segment.concurrent.PrefetchWorkerExecutorService;
-import me.ahoo.cosid.test.ConcurrentGenerateTest;
+import me.ahoo.cosid.test.ConcurrentGenerateSpec;
+import me.ahoo.cosid.test.ConcurrentGenerateStingSpec;
+import me.ahoo.cosid.test.ModSpec;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -33,9 +37,9 @@ class SegmentChainIdTest {
     @Test
     void sort() {
         IdSegmentDistributor idSegmentDistributor = new IdSegmentDistributor.Atomic();
-        IdSegmentChain idSegmentChain1 = idSegmentDistributor.nextIdSegmentChain(IdSegmentChain.newRoot());
-        IdSegmentChain idSegmentChain2 = idSegmentDistributor.nextIdSegmentChain(IdSegmentChain.newRoot());
-        IdSegmentChain idSegmentChain3 = idSegmentDistributor.nextIdSegmentChain(IdSegmentChain.newRoot());
+        IdSegmentChain idSegmentChain1 = idSegmentDistributor.nextIdSegmentChain(IdSegmentChain.newRoot(false));
+        IdSegmentChain idSegmentChain2 = idSegmentDistributor.nextIdSegmentChain(IdSegmentChain.newRoot(false));
+        IdSegmentChain idSegmentChain3 = idSegmentDistributor.nextIdSegmentChain(IdSegmentChain.newRoot(false));
         List<IdSegmentChain> chainList = Arrays.asList(idSegmentChain2, idSegmentChain1, idSegmentChain3);
         chainList.sort(null);
         Assertions.assertEquals(idSegmentChain1, chainList.get(0));
@@ -44,14 +48,19 @@ class SegmentChainIdTest {
     }
     
     @Test
+    void current() {
+        SegmentChainId segmentChainId = new SegmentChainId(TIME_TO_LIVE_FOREVER, 10, new IdSegmentDistributor.Atomic(2), PrefetchWorkerExecutorService.DEFAULT);
+        assertThat(segmentChainId.current().isAvailable(), equalTo(false));
+    }
+    
+    @Test
     void nextIdSegmentsChain() {
         IdSegmentDistributor idSegmentDistributor = new IdSegmentDistributor.Atomic();
-        IdSegmentChain rootChain = idSegmentDistributor.nextIdSegmentChain(IdSegmentChain.newRoot(), 3, TIME_TO_LIVE_FOREVER);
+        IdSegmentChain rootChain = idSegmentDistributor.nextIdSegmentChain(IdSegmentChain.newRoot(true), 3, TIME_TO_LIVE_FOREVER);
         Assertions.assertEquals(0, rootChain.getVersion());
         Assertions.assertEquals(0, rootChain.getIdSegment().getOffset());
-        Assertions.assertEquals(300, rootChain.getStep());
-        Assertions.assertEquals(300, rootChain.getMaxId());
-        
+        Assertions.assertEquals(30, rootChain.getStep());
+        Assertions.assertEquals(30, rootChain.getMaxId());
     }
     
     @Test
@@ -66,14 +75,26 @@ class SegmentChainIdTest {
     public void concurrent_generate() {
         SegmentChainId segmentChainId = new SegmentChainId(new IdSegmentDistributor.Mock());
         
-        new ConcurrentGenerateTest(segmentChainId).assertConcurrentGenerate();
+        new ConcurrentGenerateSpec(segmentChainId).verify();
+    }
+    
+    @Test
+    public void sequenceModUniformity() {
+        SegmentChainId segmentChainId = new SegmentChainId(new IdSegmentDistributor.Mock());
+        new ModSpec(99999, 4, 100, segmentChainId::generate, ModSpec.DEFAULT_WAIT).verify();
+    }
+    
+    @Test
+    public void generateWhenConcurrentString() {
+        IdSegmentDistributor testMaxIdDistributor = new IdSegmentDistributor.Mock();
+        new ConcurrentGenerateStingSpec(new SegmentChainId(testMaxIdDistributor)).verify();
     }
     
     @Test
     public void concurrent_generate_multi_instance() {
         
         IdSegmentDistributor testMaxIdDistributor = new IdSegmentDistributor.Mock();
-        new ConcurrentGenerateTest(new SegmentChainId(testMaxIdDistributor), new SegmentChainId(testMaxIdDistributor)) {
+        new ConcurrentGenerateSpec(new SegmentChainId(testMaxIdDistributor), new SegmentChainId(testMaxIdDistributor)) {
             
             @Override
             protected void assertGlobalEach(long previousId, long id) {
@@ -87,6 +108,8 @@ class SegmentChainIdTest {
             protected void assertGlobalLast(long lastId) {
                 Assertions.assertTrue(getIdSize() <= lastId);
             }
-        }.assertConcurrentGenerate();
+        }.verify();
     }
+    
+    
 }

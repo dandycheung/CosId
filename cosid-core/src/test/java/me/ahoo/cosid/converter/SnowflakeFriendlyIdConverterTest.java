@@ -13,10 +13,21 @@
 
 package me.ahoo.cosid.converter;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.*;
+
+import me.ahoo.cosid.snowflake.SecondSnowflakeId;
+import me.ahoo.cosid.snowflake.SecondSnowflakeIdStateParser;
+import me.ahoo.cosid.snowflake.SnowflakeId;
+import me.ahoo.cosid.stat.SimpleStat;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * @author rocher kong
@@ -28,7 +39,7 @@ class SnowflakeFriendlyIdConverterTest {
         String idStr = SnowflakeFriendlyIdConverter.INSTANCE.asString(argId);
         Assertions.assertNotNull(idStr);
     }
-
+    
     @ParameterizedTest
     @ValueSource(longs = {295913926632165376L})
     void asLong(long argId) {
@@ -36,14 +47,27 @@ class SnowflakeFriendlyIdConverterTest {
         long actual = SnowflakeFriendlyIdConverter.INSTANCE.asLong(idStr);
         Assertions.assertEquals(argId, actual);
     }
-
+    
     @ParameterizedTest
     @ValueSource(strings = {"20220320133617924-5-0"})
     void asLong2(String argId) {
         long actual = SnowflakeFriendlyIdConverter.INSTANCE.asLong(argId);
         Assertions.assertNotNull(actual);
     }
-
-
-
+    
+    @Test
+    void getParser() {
+        SnowflakeId idGen = new SecondSnowflakeId(LocalDateTime.now().atZone(ZoneId.systemDefault()).toEpochSecond(),
+            SecondSnowflakeId.DEFAULT_TIMESTAMP_BIT,
+            SecondSnowflakeId.DEFAULT_MACHINE_BIT,
+            SecondSnowflakeId.DEFAULT_SEQUENCE_BIT, 1023, 512);
+        SecondSnowflakeIdStateParser snowflakeIdStateParser = SecondSnowflakeIdStateParser.of(idGen);
+        SnowflakeFriendlyIdConverter snowflakeFriendlyIdConverter = new SnowflakeFriendlyIdConverter(snowflakeIdStateParser);
+        Assertions.assertNotNull(snowflakeFriendlyIdConverter.getParser());
+    }
+    
+    @Test
+    void stat() {
+        assertThat(SnowflakeFriendlyIdConverter.INSTANCE.stat(), instanceOf(SimpleStat.class));
+    }
 }

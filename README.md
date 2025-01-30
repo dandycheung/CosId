@@ -6,7 +6,10 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202-4EB1BA.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)
 [![GitHub release](https://img.shields.io/github/release/Ahoo-Wang/CosId.svg)](https://github.com/Ahoo-Wang/CosId/releases)
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/me.ahoo.cosid/cosid-core/badge.svg)](https://maven-badges.herokuapp.com/maven-central/me.ahoo.cosid/cosid-core)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/dfd1d6237a1644409548ebfbca300dc1)](https://app.codacy.com/gh/Ahoo-Wang/CosId?utm_source=github.com&utm_medium=referral&utm_content=Ahoo-Wang/CosId&utm_campaign=Badge_Grade_Settings)
+[![codecov](https://codecov.io/gh/Ahoo-Wang/CosId/branch/main/graph/badge.svg?token=L0N51NB7ET)](https://codecov.io/gh/Ahoo-Wang/CosId)
+![Integration Test Status](https://github.com/Ahoo-Wang/CosId/actions/workflows/integration-test.yml/badge.svg)
 
 > [中文文档](https://cosid.ahoo.me/)
 
@@ -15,7 +18,8 @@
 *[CosId](https://github.com/Ahoo-Wang/CosId)* aims to provide a universal, flexible and high-performance distributed ID
 generator.
 
-- `SnowflakeId` : Stand-alone *TPS performance：4,096,000* [JMH Benchmark](#jmh-benchmark) , It mainly solves two major
+- `CosIdGenerator` : Stand-alone *TPS performance：15,570,085 ops/s* , three times that of `UUID.randomUUID()`,global trend increasing based-time.
+- `SnowflakeId` : Stand-alone *TPS performance：4,096,000 ops/s* [JMH Benchmark](#jmh-benchmark) , It mainly solves two major
   problems of `SnowflakeId`: machine number allocation problem and clock backwards problem and provide a more friendly
   and flexible experience.
 - `SegmentId`: Get a segment (`Step`) ID every time to reduce the network IO request frequency of the `IdSegment`
@@ -23,22 +27,24 @@ generator.
     - `IdSegmentDistributor`:
         - `RedisIdSegmentDistributor`: `IdSegment` distributor based on *Redis*.
         - `JdbcIdSegmentDistributor`: The *Jdbc-based* `IdSegment` distributor supports various relational databases.
-    - `SegmentChainId`(**recommend**):`SegmentChainId` (*lock-free*) is an enhancement of `SegmentId`, the design
-      diagram is as follows. `PrefetchWorker` maintains a `safe distance`, so that `SegmentChainId` achieves
-      approximately `AtomicLong` *TPS performance (Step 1000): 127,439,148+/s* [JMH Benchmark](#jmh-benchmark) .
-        - `PrefetchWorker` maintains a safe distance (`safeDistance`), and supports dynamic `safeDistance` expansion and
-          contraction based on hunger status.
+        - `ZookeeperIdSegmentDistributor`: `IdSegment` distributor based on *Zookeeper*.
+        - `MongoIdSegmentDistributor`: `IdSegment` distributor based on *MongoDB*.
+- `SegmentChainId`(**recommend**):`SegmentChainId` (*lock-free*) is an enhancement of `SegmentId`, the design
+  diagram is as follows. `PrefetchWorker` maintains a `safe distance`, so that `SegmentChainId` achieves
+  approximately `AtomicLong` *TPS performance: 127,439,148+ ops/s* [JMH Benchmark](#jmh-benchmark) .
+    - `PrefetchWorker` maintains a safe distance (`safeDistance`), and supports dynamic `safeDistance` expansion and
+      contraction based on hunger status.
 
 ## SnowflakeId
 
 <p align="center">
-     <img src="./document/docs/.vuepress/public/assets/design/Snowflake-identifier.png"/>
+     <img src="./document/docs/.vuepress/public/assets/design/Snowflake-identifier.png" alt="Snowflake"/>
 </p>
 
 > *SnowflakeId* is a distributed ID algorithm that uses `Long` (64-bit) bit partition to generate ID.
 > The general bit allocation scheme is : `timestamp` (41-bit) + `machineId` (10-bit) + `sequence` (12-bit) = 63-bit。
 
-- 41-bit `timestamp` = (1L<<41)/(1000/3600/365) approximately 69 years of timestamp can be stored, that is, the usable
+- 41-bit `timestamp` = (1L<<41)/(1000/3600/24/365) approximately 69 years of timestamp can be stored, that is, the usable
   absolute time is `EPOCH` + 69 years. Generally, we need to customize `EPOCH` as the product development time. In
   addition, we can increase the number of allocated bits by compressing other areas， The number of timestamp bits to
   extend the available time.
@@ -100,7 +106,10 @@ cosid:
 #### RedisMachineIdDistributor
 
 <p align="center">
-     <img src="./document/docs/.vuepress/public/assets/design/RedisMachineIdDistributor.png"/>
+     <img src="./document/docs/.vuepress/public/assets/design/RedisMachineIdDistributor.png" alt="Redis Machine Id Distributor"/>
+</p>
+<p align="center">
+     <img src="./document/docs/.vuepress/public/assets/design/Machine-Id-Safe-Guard.png" alt="Machine Id Safe Guard"/>
 </p>
 
 ```yaml
@@ -232,7 +241,7 @@ public interface SnowflakeFriendlyId extends SnowflakeId {
 ```
 
 ```java
-        SnowflakeFriendlyId snowflakeFriendlyId=new DefaultSnowflakeFriendlyId(snowflakeId);
+    SnowflakeFriendlyId snowflakeFriendlyId=new DefaultSnowflakeFriendlyId(snowflakeId);
     SnowflakeIdState idState=snowflakeFriendlyId.friendlyId();
     idState.getFriendlyId(); //20210623131730192-1-0
 ```
@@ -240,7 +249,7 @@ public interface SnowflakeFriendlyId extends SnowflakeId {
 ## SegmentId
 
 <p align="center">
-     <img src="./document/docs/.vuepress/public/assets/design/SegmentId.png"/>
+     <img src="./document/docs/.vuepress/public/assets/design/SegmentId.png" alt="Segment Id"/>
 </p>
 
 ### RedisIdSegmentDistributor
@@ -427,11 +436,7 @@ public interface OrderRepository {
 
 ### ShardingSphere Plugin
 
-> Kotlin DSL
-
-``` kotlin
-    implementation("me.ahoo.cosid:cosid-shardingsphere:${cosidVersion}")
-```
+> [cosid-shardingsphere](https://github.com/apache/shardingsphere/tree/master/features/sharding/plugin/cosid)
 
 #### CosIdKeyGenerateAlgorithm (Distributed-Id)
 
@@ -450,7 +455,7 @@ spring:
 #### Interval-based time range sharding algorithm
 
 <p align="center">
-     <img src="./document/docs/.vuepress/public/assets/design/CosIdIntervalShardingAlgorithm.png"/>
+     <img src="./document/docs/.vuepress/public/assets/design/CosIdIntervalShardingAlgorithm.png" alt="CosIdIntervalShardingAlgorithm"/>
 </p>
 
 - Ease of use: supports multiple data types (`Long`/`LocalDateTime`/`DATE`/ `String` / `SnowflakeId`),The official
@@ -487,7 +492,7 @@ spring:
 #### CosIdModShardingAlgorithm
 
 <p align="center">
-     <img src="./document/docs/.vuepress/public/assets/design/CosIdModShardingAlgorithm.png"/>
+     <img src="./document/docs/.vuepress/public/assets/design/CosIdModShardingAlgorithm.png" alt="CosId Mod Sharding Algorithm"/>
 </p>
 
 - Performance: Compared to  `org.apache.shardingsphere.sharding.algorithm.sharding.datetime.IntervalShardingAlgorithm`
@@ -511,10 +516,9 @@ spring:
 ```
 
 ## Examples
+> 项目中根据使用的场景（`jdbc`/`proxy`/`redis-cosid`/`redis`/`shardingsphere`/`zookeeper`等）提供了对应的例子，实践过程中可以参照配置快速接入。
 
-[CosId-Examples](https://github.com/Ahoo-Wang/CosId/tree/main/cosid-example)
-
-> http://localhost:8008/swagger-ui/index.html#/
+[点击查看Examples](https://github.com/Ahoo-Wang/CosId/tree/main/examples)
 
 ## Installation
 
@@ -523,7 +527,7 @@ spring:
 > Kotlin DSL
 
 ``` kotlin
-    val cosidVersion = "1.8.9";
+    val cosidVersion = "1.14.5";
     implementation("me.ahoo.cosid:cosid-spring-boot-starter:${cosidVersion}")
 ```
 
@@ -539,7 +543,7 @@ spring:
     <modelVersion>4.0.0</modelVersion>
     <artifactId>demo</artifactId>
     <properties>
-        <cosid.version>1.8.9</cosid.version>
+        <cosid.version>1.14.5</cosid.version>
     </properties>
 
     <dependencies>
@@ -587,23 +591,6 @@ spring:
               standard:
                 sharding-column: id
                 sharding-algorithm-name: table-inline
-          t_friendly_table:
-            actual-data-nodes: ds0.t_friendly_table
-          t_order:
-            actual-data-nodes: ds$->{0..1}.t_order
-            database-strategy:
-              standard:
-                sharding-column: order_id
-                sharding-algorithm-name: order-db-inline
-            key-generate-strategy:
-              column: order_id
-              key-generator-name: order
-          t_order_item:
-            actual-data-nodes: ds$->{0..1}.t_order_item
-            database-strategy:
-              standard:
-                sharding-column: order_id
-                sharding-algorithm-name: order-db-inline
           t_date_log:
             actual-data-nodes: ds0.t_date_log_202112
             key-generate-strategy:
@@ -613,73 +600,16 @@ spring:
               standard:
                 sharding-column: create_time
                 sharding-algorithm-name: data-log-interval
-          t_date_time_log:
-            actual-data-nodes: ds0.t_date_time_log_202112
-            key-generate-strategy:
-              column: id
-              key-generator-name: snowflake
-            table-strategy:
-              standard:
-                sharding-column: create_time
-                sharding-algorithm-name: data-time-log-interval
-          t_timestamp_log:
-            actual-data-nodes: ds0.t_timestamp_log_202112
-            key-generate-strategy:
-              column: id
-              key-generator-name: snowflake
-            table-strategy:
-              standard:
-                sharding-column: create_time
-                sharding-algorithm-name: timestamp-log-interval
-          t_snowflake_log:
-            actual-data-nodes: ds0.t_snowflake_log_202112
-            table-strategy:
-              standard:
-                sharding-column: id
-                sharding-algorithm-name: snowflake-log-interval
         sharding-algorithms:
           table-inline:
             type: COSID_MOD
             props:
               mod: 2
               logic-name-prefix: t_table_
-          order-db-inline:
-            type: COSID_MOD
-            props:
-              mod: 2
-              logic-name-prefix: ds
           data-log-interval:
             type: COSID_INTERVAL
             props:
               logic-name-prefix: t_date_log_
-              datetime-lower: 2021-12-08 22:00:00
-              datetime-upper: 2022-12-01 00:00:00
-              sharding-suffix-pattern: yyyyMM
-              datetime-interval-unit: MONTHS
-              datetime-interval-amount: 1
-          data-time-log-interval:
-            type: COSID_INTERVAL
-            props:
-              logic-name-prefix: t_date_time_log_
-              datetime-lower: 2021-12-08 22:00:00
-              datetime-upper: 2022-12-01 00:00:00
-              sharding-suffix-pattern: yyyyMM
-              datetime-interval-unit: MONTHS
-              datetime-interval-amount: 1
-          timestamp-log-interval:
-            type: COSID_INTERVAL
-            props:
-              logic-name-prefix: t_timestamp_log_
-              datetime-lower: 2021-12-08 22:00:00
-              datetime-upper: 2022-12-01 00:00:00
-              sharding-suffix-pattern: yyyyMM
-              datetime-interval-unit: MONTHS
-              datetime-interval-amount: 1
-          snowflake-log-interval:
-            type: COSID_INTERVAL
-            props:
-              logic-name-prefix: t_snowflake_log_
-              id-name: snowflake
               datetime-lower: 2021-12-08 22:00:00
               datetime-upper: 2022-12-01 00:00:00
               sharding-suffix-pattern: yyyyMM
@@ -690,30 +620,25 @@ spring:
             type: COSID
             props:
               id-name: snowflake
-          order:
-            type: COSID
-            props:
-              id-name: order
+
 
 cosid:
   namespace: ${spring.application.name}
+  machine:
+    enabled: true
+    #      stable: true
+    #      machine-bit: 10
+    #      instance-id: ${HOSTNAME}
+    distributor:
+      type: redis
+    #        manual:
+    #          machine-id: 0
   snowflake:
     enabled: true
     #    epoch: 1577203200000
     clock-backwards:
       spin-threshold: 10
       broken-threshold: 2000
-    machine:
-      #      stable: true
-      #      machine-bit: 10
-      #      instance-id: ${HOSTNAME}
-      distributor:
-        type: redis
-      #        manual:
-      #          machine-id: 0
-      state-storage:
-        local:
-          state-location: ./cosid-machine-state/
     share:
       clock-sync: true
       friendly: true
@@ -759,7 +684,7 @@ cosid:
 ``` shell
 gradle cosid-core:jmh
 # or
-java -jar cosid-core/build/libs/cosid-core-1.8.9-jmh.jar -bm thrpt -wi 1 -rf json -f 1
+java -jar cosid-core/build/libs/cosid-core-1.14.5-jmh.jar -bm thrpt -wi 1 -rf json -f 1
 ```
 
 ```
@@ -783,6 +708,14 @@ SnowflakeIdBenchmark.secondSnowflakeId_generate             thrpt       4206843.
 
 <p align="center" >
   <img src="./document/docs/.vuepress/public/assets/perf/Percentile-Sample-Of-SegmentChainId.png" alt="Percentile-Sample-Of-SegmentChainId"/>
+</p>
+
+### CosId VS MeiTuan Leaf
+
+> CosId (`SegmentChainId`) is 5 times faster than Leaf(`segment`).
+
+<p align="center" >
+  <img  src="./document/docs/.vuepress/public/assets/perf/CosId-VS-Leaf.png" alt="CosId VS MeiTuan Leaf"/>
 </p>
 
 ## Community Partners and Sponsors

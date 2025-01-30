@@ -13,6 +13,7 @@
 
 package me.ahoo.cosid;
 
+import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -21,14 +22,14 @@ import javax.annotation.concurrent.ThreadSafe;
  * @author ahoo wang
  */
 @ThreadSafe
-public class IntegerIdGenerator {
-
+public class IntegerIdGenerator implements StringIdGenerator {
+    
     protected final IdGenerator actual;
-
+    
     public IntegerIdGenerator(IdGenerator actual) {
         this.actual = actual;
     }
-
+    
     /**
      * Generate distributed ID of type int.
      *
@@ -40,36 +41,38 @@ public class IntegerIdGenerator {
         ensureInteger(id);
         return (int) id;
     }
-
+    
     /**
      * Generate distributed ID of type string.
      *
      * @return generated distributed ID of type string
      * @throws IdOverflowException This exception is thrown when the ID overflows
      */
+    @Nonnull
+    @Override
     public String generateAsString() throws IdOverflowException {
         long id = actual.generate();
         ensureInteger(id);
         return actual.idConverter().asString(id);
     }
-
+    
     private void ensureInteger(long id) throws IdOverflowException {
         if (id < Integer.MIN_VALUE || id > Integer.MAX_VALUE) {
             throw new IdOverflowException(id);
         }
     }
-
+    
     /**
      * ID Overflow Exception.
      */
     public static class IdOverflowException extends CosIdException {
         private final long id;
-
+        
         public IdOverflowException(long id) {
             super("id [" + id + "] overflow.");
             this.id = id;
         }
-
+        
         public long getId() {
             return id;
         }

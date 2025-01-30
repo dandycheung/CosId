@@ -13,6 +13,11 @@
 
 package me.ahoo.cosid.converter;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.*;
+
+import me.ahoo.cosid.stat.converter.ToStringConverterStat;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -22,14 +27,14 @@ import org.junit.jupiter.params.provider.ValueSource;
  * @author rocher kong
  */
 class ToStringIdConverterTest {
-
+    
     @ParameterizedTest
     @ValueSource(longs = {1, 5, 62, 63, 124, Integer.MAX_VALUE, Long.MAX_VALUE})
     void asString(long argId) {
         String idStr = ToStringIdConverter.INSTANCE.asString(argId);
         Assertions.assertNotNull(idStr);
     }
-
+    
     @ParameterizedTest
     @ValueSource(longs = {1, 5, 62, 63, 124, Integer.MAX_VALUE, Long.MAX_VALUE})
     void asLong(long argId) {
@@ -37,11 +42,11 @@ class ToStringIdConverterTest {
         long actual = ToStringIdConverter.INSTANCE.asLong(idStr);
         Assertions.assertEquals(argId, actual);
     }
-
+    
     @Test
     void asLongWhenNumberFormat() {
-        ToStringIdConverter idConvert = new ToStringIdConverter();
-
+        ToStringIdConverter idConvert = ToStringIdConverter.INSTANCE;
+        
         Assertions.assertDoesNotThrow(() -> {
             idConvert.asLong("-1");
         });
@@ -52,5 +57,16 @@ class ToStringIdConverterTest {
             idConvert.asLong("1_");
         });
     }
-
+    
+    @Test
+    void asStringWithPadStart() {
+        ToStringIdConverter idConvert = new ToStringIdConverter(true, 5);
+        Assertions.assertEquals("00001", idConvert.asString(1));
+        Assertions.assertEquals(1, idConvert.asLong("00001"));
+    }
+    
+    @Test
+    void stat() {
+        assertThat(ToStringIdConverter.INSTANCE.stat(), instanceOf(ToStringConverterStat.class));
+    }
 }

@@ -13,6 +13,10 @@
 
 package me.ahoo.cosid;
 
+import me.ahoo.cosid.stat.Stat;
+import me.ahoo.cosid.stat.Statistical;
+
+import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -21,21 +25,27 @@ import javax.annotation.concurrent.ThreadSafe;
  * @author ahoo wang
  */
 @ThreadSafe
-public interface IdConverter {
-
+public interface IdConverter extends Statistical {
+    
     /**
      * convert {@code long} type ID to {@link String}.
      *
      * @param id {@code long} type ID
      * @return {@link String} type ID
      */
+    @Nonnull
     String asString(long id);
-
+    
     /**
      * convert {@link String} type ID to {@code long}.
      *
      * @param idString {@link String} type ID
      * @return {@code long} type ID
      */
-    long asLong(String idString);
+    long asLong(@Nonnull String idString);
+    
+    @Override
+    default Stat stat() {
+        return Stat.simple(getClass().getSimpleName());
+    }
 }

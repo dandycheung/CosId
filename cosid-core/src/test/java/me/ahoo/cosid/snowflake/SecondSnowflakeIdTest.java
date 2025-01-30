@@ -1,6 +1,12 @@
 package me.ahoo.cosid.snowflake;
 
-import me.ahoo.cosid.test.ConcurrentGenerateTest;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.*;
+
+import me.ahoo.cosid.CosId;
+import me.ahoo.cosid.converter.Radix62IdConverter;
+import me.ahoo.cosid.test.ConcurrentGenerateSpec;
+import me.ahoo.cosid.test.ConcurrentGenerateStingSpec;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,7 +22,7 @@ import java.time.ZoneId;
  * @author ahoo wang
  */
 class SecondSnowflakeIdTest {
-    public static final long TEST_MACHINE_ID = 1;
+    public static final int TEST_MACHINE_ID = 1;
     SnowflakeFriendlyId snowflakeId;
     
     @BeforeEach
@@ -34,6 +40,15 @@ class SecondSnowflakeIdTest {
         SnowflakeIdState idState = snowflakeId.getParser().parse(idFirst);
         Assertions.assertNotNull(idState);
         Assertions.assertEquals(TEST_MACHINE_ID, idState.getMachineId());
+    }
+    
+    @Test
+    public void generateWhenMachineLeftGreaterThen30() {
+        SecondSnowflakeId idGen = new SecondSnowflakeId(CosId.COSID_EPOCH_SECOND, SnowflakeId.TOTAL_BIT - 31, 1, 30, 1, TEST_MACHINE_ID);
+        long idFirst = idGen.generate();
+        assertThat(idFirst, greaterThan(0L));
+        long idSecond = idGen.generate();
+        assertThat(idSecond, greaterThan(idFirst));
     }
     
     @Test
@@ -55,11 +70,11 @@ class SecondSnowflakeIdTest {
     
     @Test
     public void customizeEpoch() {
-    
+        
         SnowflakeId idGen = new SecondSnowflakeId(LocalDateTime.now().atZone(ZoneId.systemDefault()).toEpochSecond(),
             SecondSnowflakeId.DEFAULT_TIMESTAMP_BIT,
             SecondSnowflakeId.DEFAULT_MACHINE_BIT,
-            SecondSnowflakeId.DEFAULT_SEQUENCE_BIT, 1023);
+            SecondSnowflakeId.DEFAULT_SEQUENCE_BIT, 1023, 512);
         SecondSnowflakeIdStateParser snowflakeIdStateParser = SecondSnowflakeIdStateParser.of(idGen);
         long idFirst = idGen.generate();
         long idSecond = idGen.generate();
@@ -71,9 +86,10 @@ class SecondSnowflakeIdTest {
         SnowflakeIdState idStateOfFriendlyId = snowflakeIdStateParser.parse(idState.getFriendlyId());
         Assertions.assertEquals(idState, idStateOfFriendlyId);
     }
+    
     @Test
     public void generateWhenConcurrent() {
-        new ConcurrentGenerateTest(snowflakeId) {
+        new ConcurrentGenerateSpec(snowflakeId) {
             @Override
             protected void assertGlobalFirst(long id) {
             }
@@ -87,6 +103,11 @@ class SecondSnowflakeIdTest {
             protected void assertGlobalLast(long lastId) {
             }
             
-        }.assertConcurrentGenerate();
+        }.verify();
+    }
+    
+    @Test
+    public void generateWhenConcurrentString() {
+        new ConcurrentGenerateStingSpec(new StringSnowflakeId(snowflakeId, Radix62IdConverter.PAD_START)).verify();
     }
 }
